@@ -12,20 +12,34 @@ fn main() {
     opts.filter_policy = Rc::new(Box::new(rusty_leveldb::BloomPolicy::new(12)));
 
     let mut db = DB::open(&dir, opts).unwrap();
-    let n: usize = 100_000;
+    let n: usize = 1_000_000;
 
-    println!("=== rusty-leveldb Benchmark (100K ops) ===");
+    println!("=== rusty-leveldb Benchmark (1M ops) ===");
     println!("    mmap I/O: enabled (>16KB files)");
     println!("    bloom filter: 12 bits/key");
     println!("    block cache: 32 MB");
     println!();
 
+    // Pre-generate random indices for random reads
+    let mut rnd_indices = Vec::with_capacity(n);
+    for i in 0..n {
+        rnd_indices.push((i * 7 + 13) % n);
+    }
+
+    // Pre-generate keys to avoid format! overhead in the hot loop
+    let mut keys = Vec::with_capacity(n);
+    for i in 0..n {
+        keys.push(format!("key{:08}", i).into_bytes());
+    }
+    let mut vals = Vec::with_capacity(n);
+    for i in 0..n {
+        vals.push(format!("value{:08}_padding_{}", i, i * 7).into_bytes());
+    }
+
     // --- Sequential Writes ---
     let start = Instant::now();
     for i in 0..n {
-        let key = format!("key{:08}", i);
-        let val = format!("value{:08}_padding_{}", i, i * 7);
-        db.put(key.as_bytes(), val.as_bytes()).unwrap();
+        db.put(&keys[i], &vals[i]).unwrap();
     }
     let wd = start.elapsed();
     println!(
@@ -40,8 +54,7 @@ fn main() {
     // --- Sequential Reads (cold) ---
     let start = Instant::now();
     for i in 0..n {
-        let key = format!("key{:08}", i);
-        let _ = db.get(key.as_bytes());
+        let _ = db.get(&keys[i]);
     }
     let rd = start.elapsed();
     println!(
@@ -53,8 +66,7 @@ fn main() {
     // --- Sequential Reads (warm cache) ---
     let start = Instant::now();
     for i in 0..n {
-        let key = format!("key{:08}", i);
-        let _ = db.get(key.as_bytes());
+        let _ = db.get(&keys[i]);
     }
     let rw = start.elapsed();
     println!(
@@ -65,10 +77,8 @@ fn main() {
 
     // --- Random Reads ---
     let start = Instant::now();
-    for i in 0..n {
-        let idx = (i * 7 + 13) % n;
-        let key = format!("key{:08}", idx);
-        let _ = db.get(key.as_bytes());
+    for &idx in &rnd_indices {
+        let _ = db.get(&keys[idx]);
     }
     let rr = start.elapsed();
     println!(
@@ -80,8 +90,7 @@ fn main() {
     // --- Deletes ---
     let start = Instant::now();
     for i in 0..n / 2 {
-        let key = format!("key{:08}", i);
-        db.delete(key.as_bytes()).unwrap();
+        db.delete(&keys[i]).unwrap();
     }
     let dd = start.elapsed();
     println!(

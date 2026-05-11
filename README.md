@@ -23,6 +23,8 @@ A fully compatible, high-performance implementation of [Google LevelDB](https://
 
 Benchmark on Apple Silicon (100K operations, `--release`):
 
+*See [BENCHMARK_C_VS_RUST.md](BENCHMARK_C_VS_RUST.md) for a rigorous 1,000,000 operation comparison against upstream C++ LevelDB.*
+
 | Operation | Ops/sec | Latency (per op) |
 |-----------|---------|-----------------|
 | Sequential Writes | **~642K** | 1.5 µs |
