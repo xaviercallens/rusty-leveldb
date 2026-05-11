@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 
 use crate::block::BlockContents;
 use crate::options::Options;
-
-use integer_encoding::{FixedIntWriter, VarIntWriter};
+use integer_encoding::VarIntWriter;
 
 /// BlockBuilder contains functionality for building a block consisting of consecutive key-value
 /// entries.
@@ -104,15 +103,12 @@ impl BlockBuilder {
 
         // 1. Append RESTARTS
         for r in self.restarts.iter() {
-            self.buffer
-                .write_fixedint(*r)
-                .expect("write to buffer failed");
+            self.buffer.extend_from_slice(&r.to_le_bytes());
         }
 
         // 2. Append N_RESTARTS
         self.buffer
-            .write_fixedint(self.restarts.len() as u32)
-            .expect("write to buffer failed");
+            .extend_from_slice(&(self.restarts.len() as u32).to_le_bytes());
 
         // done
         self.buffer.into()

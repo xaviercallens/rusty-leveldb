@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use integer_encoding::FixedInt;
-
 /// Encapsulates a filter algorithm allowing to search for keys more efficiently.
 /// Usually, policies are used as a BoxedFilterPolicy (see below), so they
 /// can be easily cloned and nested.
@@ -79,34 +77,29 @@ impl BloomPolicy {
     }
 
     fn bloom_hash(&self, data: &[u8]) -> u32 {
-        let m: u32 = 0xc6a4a793;
-        let r: u32 = 24;
+        const M: u32 = 0xc6a4_a793;
+        const R: u32 = 24;
 
-        let mut ix = 0;
-        let limit = data.len();
+        let mut h = BLOOM_SEED ^ ((data.len() as u32).wrapping_mul(M));
 
-        let mut h: u32 = BLOOM_SEED ^ (limit as u64 * m as u64) as u32;
-
-        while ix + 4 <= limit {
-            let w = u32::decode_fixed(&data[ix..ix + 4]);
-            ix += 4;
-
-            h = (h as u64 + w as u64) as u32;
-            h = (h as u64 * m as u64) as u32;
+        let mut chunks = data.chunks_exact(4);
+        for chunk in &mut chunks {
+            let w = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            h = h.wrapping_add(w);
+            h = h.wrapping_mul(M);
             h ^= h >> 16;
         }
 
-        // Process left-over bytes
-        assert!(limit - ix < 4);
-
-        if limit - ix > 0 {
-            for (i, b) in data[ix..].iter().enumerate() {
-                h = h.overflowing_add((*b as u32) << (8 * i)).0;
-            }
-
-            h = (h as u64 * m as u64) as u32;
-            h ^= h >> r;
+        let rem = chunks.remainder();
+        if !rem.is_empty() {
+            let tail = rem.iter().enumerate().fold(0u32, |acc, (idx, &b)| {
+                acc.wrapping_add((b as u32) << (idx * 8))
+            });
+            h = h.wrapping_add(tail);
+            h = h.wrapping_mul(M);
+            h ^= h >> R;
         }
+
         h
     }
 }

@@ -1,4 +1,4 @@
-use rusty_leveldb::{DB, Options};
+use rusty_leveldb::{Options, DB};
 use std::rc::Rc;
 use std::time::Instant;
 

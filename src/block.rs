@@ -4,7 +4,6 @@ use crate::options::Options;
 use crate::types::LdbIterator;
 
 use bytes::{Bytes, BytesMut};
-use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
 
 pub type BlockContents = Bytes;
@@ -41,7 +40,8 @@ impl Block {
     /// refcounted block contents as this block, meaning that if the iterator isn't released,
     /// the memory occupied by the block isn't, either)
     pub fn iter(&self) -> BlockIter {
-        let restarts = u32::decode_fixed(&self.block[self.block.len() - 4..]);
+        let b: [u8; 4] = self.block[self.block.len() - 4..].try_into().unwrap();
+        let restarts = u32::from_le_bytes(b);
         let restart_offset = self.block.len() - 4 - 4 * restarts as usize;
 
         BlockIter {
@@ -97,7 +97,8 @@ pub struct BlockIter {
 impl BlockIter {
     /// Return the number of restarts in this block.
     fn number_restarts(&self) -> usize {
-        u32::decode_fixed(&self.block[self.block.len() - 4..]) as usize
+        let b: [u8; 4] = self.block[self.block.len() - 4..].try_into().unwrap();
+        u32::from_le_bytes(b) as usize
     }
 
     /// Seek to restart point `ix`. After the seek, current() will return the entry at that restart
@@ -120,7 +121,8 @@ impl BlockIter {
     /// Return the offset that restart `ix` points to.
     fn get_restart_point(&self, ix: usize) -> usize {
         let restart = self.restarts_off + 4 * ix;
-        u32::decode_fixed(&self.block[restart..restart + 4]) as usize
+        let b: [u8; 4] = self.block[restart..restart + 4].try_into().unwrap();
+        u32::from_le_bytes(b) as usize
     }
 
     /// The layout of an entry is
@@ -132,14 +134,26 @@ impl BlockIter {
     /// above.
     /// Advances self.offset to the beginning of the next entry.
     fn parse_entry_and_advance(&mut self) -> Option<(usize, usize, usize, usize)> {
+        let input = &self.block[self.offset..];
+
+        if input.len() >= 3 && (input[0] | input[1] | input[2]) < 128 {
+            let shared = input[0] as usize;
+            let non_shared = input[1] as usize;
+            let valsize = input[2] as usize;
+            let i = 3;
+            self.val_offset = self.offset + i + non_shared;
+            self.offset = self.val_offset + valsize;
+            return Some((shared, non_shared, valsize, i));
+        }
+
         let mut i = 0;
-        let (shared, sharedlen) = usize::decode_var(&self.block[self.offset..])?;
+        let (shared, sharedlen) = usize::decode_var(&input[i..])?;
         i += sharedlen;
 
-        let (non_shared, non_sharedlen) = usize::decode_var(&self.block[self.offset + i..])?;
+        let (non_shared, non_sharedlen) = usize::decode_var(&input[i..])?;
         i += non_sharedlen;
 
-        let (valsize, valsizelen) = usize::decode_var(&self.block[self.offset + i..])?;
+        let (valsize, valsizelen) = usize::decode_var(&input[i..])?;
         i += valsizelen;
 
         self.val_offset = self.offset + i + non_shared;
