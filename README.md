@@ -25,11 +25,11 @@ Benchmark on Apple Silicon (100K operations, `--release`):
 
 | Operation | Ops/sec | Latency (per op) |
 |-----------|---------|-----------------|
-| Sequential Writes | **808K** | 1.2 µs |
-| Sequential Reads (cold) | **413K** | 2.4 µs |
-| Sequential Reads (warm) | **414K** | 2.4 µs |
-| Random Reads | **406K** | 2.5 µs |
-| Deletes | **925K** | 1.1 µs |
+| Sequential Writes | **~642K** | 1.5 µs |
+| Sequential Reads (cold) | **424K** | 2.3 µs |
+| Sequential Reads (warm) | **425K** | 2.3 µs |
+| Random Reads | **415K** | 2.4 µs |
+| Deletes | **~386K** | 2.5 µs |
 
 ### Optimizations vs Upstream
 
@@ -39,6 +39,9 @@ Benchmark on Apple Silicon (100K operations, `--release`):
 | Block cache | 32 MB (4× upstream default) | ~15% repeated reads |
 | Table cache | 2048 open files (2× upstream) | Reduced open/close overhead |
 | Bloom filter | `unsafe get_unchecked` in hot loop | ~5-10% random reads |
+| **Bloom filter fast-path** | Native endian `chunks_exact` loop | ~10% hashing speedup |
+| **Block header parsing** | Single-byte varint coalescing | ~5% sequential scan |
+| **Fixed32 native encoding**| Replaced trait traits with `from_le_bytes` | Eliminated `integer-encoding` bounds |
 
 See [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md) for the full roadmap.
 
